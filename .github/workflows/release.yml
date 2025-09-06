@@ -19,65 +19,108 @@ jobs:
           go-version: '1.24.5'
           cache: true
 
-      - name: Vet and Test
-        run: |
-          go vet ./...
-          go test -v ./...
+      - name: Vet
+        run: go vet ./...
 
-  build-and-release:
-    name: Build and Release Plugin
+      - name: Test
+        run: go test -v ./...
+
+  build:
+    name: Build Plugin for ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: lint-test
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.5'
+          cache: true
+      
+      - name: Parse plugin name from tag
+        id: parse_tag
+        shell: bash
+        run: |
+          PLUGIN_NAME=$(echo ${{ github.ref_name }} | cut -d'/' -f1)
+          echo "plugin_name=${PLUGIN_NAME}" >> $GITHUB_OUTPUT
+      
+      - name: Set output file and archive names
+        id: set_names
+        shell: bash
+        run: |
+          PLUGIN_NAME="${{ steps.parse_tag.outputs.plugin_name }}"
+          EXECUTABLE_BASE="orkestra-plugin-${PLUGIN_NAME}"
+          EXECUTABLE_NAME="${EXECUTABLE_BASE}"
+          if [ "${{ matrix.goos }}" == "windows" ]; then
+            EXECUTABLE_NAME="${EXECUTABLE_BASE}.exe"
+          fi
+          ARCHIVE_NAME="${EXECUTABLE_BASE}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
+          echo "EXECUTABLE_NAME=${EXECUTABLE_NAME}" >> $GITHUB_ENV
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_ENV
+
+      - name: Build plugin
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -ldflags="-s -w" -o ${{ env.EXECUTABLE_NAME }} ./plugins/${{ steps.parse_tag.outputs.plugin_name }}
+
+      - name: Archive plugin
+        run: zip ${{ env.ARCHIVE_NAME }} ${{ env.EXECUTABLE_NAME }}
+
+      - name: Generate checksum
+        run: sha256sum ${{ env.ARCHIVE_NAME }} > ${{ env.ARCHIVE_NAME }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-archive-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            ${{ env.ARCHIVE_NAME }}
+            ${{ env.ARCHIVE_NAME }}.sha256
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
       - name: Parse plugin name and version from tag
         id: parse_tag
         shell: bash
         run: |
-          # Pour un tag "fs/v1.0.3", ceci extraira "fs"
           PLUGIN_NAME=$(echo ${{ github.ref_name }} | cut -d'/' -f1)
-          # Et ceci extraira "v1.0.3"
           PLUGIN_VERSION=$(echo ${{ github.ref_name }} | cut -d'/' -f2)
           echo "plugin_name=${PLUGIN_NAME}" >> $GITHUB_OUTPUT
           echo "plugin_version=${PLUGIN_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Build binaries for all platforms
-        uses: goreleaser/goreleaser-action@v6
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          args: release --clean -f ./plugins/${{ steps.parse_tag.outputs.plugin_name }}/.goreleaser.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REF_NAME: ${{ steps.parse_tag.outputs.plugin_version }}
+          path: archives
 
-# NOTE: Cette approche nécessite un fichier .goreleaser.<plugin>.yml pour chaque plugin.
-# C'est la méthode la plus robuste pour gérer des builds complexes.
-#
-# Exemple de fichier ".goreleaser.core.yml" à la racine :
-#
-# build:
-#   - id: "orkestra-plugin-core"
-#     main: ./plugins/core/
-#     binary: orkestra-plugin-core
-#     env:
-#       - CGO_ENABLED=0
-#     goos:
-#       - linux
-#       - windows
-#       - darwin
-#     goarch:
-#       - amd64
-#       - arm64
-# archives:
-#   - id: "orkestra-plugin-core-archives"
-#     builds:
-#       - "orkestra-plugin-core"
-#     name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
-#     format: zip
-# release:
-#   name_template: "Plugin core {{.Version}}"
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Plugin ${{ steps.parse_tag.outputs.plugin_name }} ${{ steps.parse_tag.outputs.plugin_version }}"
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: archives/*/*
 
