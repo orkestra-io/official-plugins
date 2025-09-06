@@ -52,6 +52,7 @@ jobs:
           args: release --clean -f ./plugins/${{ steps.parse_tag.outputs.plugin_name }}/.goreleaser.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REF_NAME: ${{ steps.parse_tag.outputs.plugin_version }}
 
 # NOTE: Cette approche nécessite un fichier .goreleaser.<plugin>.yml pour chaque plugin.
 # C'est la méthode la plus robuste pour gérer des builds complexes.
