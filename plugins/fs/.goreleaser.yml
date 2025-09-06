@@ -2,10 +2,6 @@ version: 2
 
 project_name: fs
 
-monorepo:
-  tag_prefix: fs/
-  dir: fs
-
 builds:
   - id: "orkestra-plugin-fs"
     main: ./plugins/fs/
@@ -22,7 +18,7 @@ builds:
 
 archives:
   - id: "orkestra-plugin-fs-archives"
-    builds:
+    ids:
       - "orkestra-plugin-fs"
     name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
     formats: ["zip"]
