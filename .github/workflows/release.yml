@@ -47,11 +47,9 @@ jobs:
           echo "plugin_version=${PLUGIN_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Build binaries for all platforms
-        uses: goreleaser/goreleaser-action@v5
+        uses: goreleaser/goreleaser-action@v6
         with:
-          # On passe la version extraite du tag à GoReleaser
-          version: ${{ steps.parse_tag.outputs.plugin_version }}
-          # On dit à GoReleaser de ne construire que le plugin concerné
+          # version: ${{ steps.parse_tag.outputs.plugin_version }}
           args: release --clean --config .goreleaser.${{ steps.parse_tag.outputs.plugin_name }}.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
