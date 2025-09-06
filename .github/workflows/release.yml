@@ -1,0 +1,85 @@
+name: Release Official Plugin
+
+on:
+  push:
+    tags:
+      - "*/v*"
+
+jobs:
+  lint-test:
+    name: Lint and Test Monorepo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.5'
+          cache: true
+
+      - name: Vet and Test
+        run: |
+          go vet ./...
+          go test -v ./...
+
+  build-and-release:
+    name: Build and Release Plugin
+    needs: lint-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Parse plugin name and version from tag
+        id: parse_tag
+        shell: bash
+        run: |
+          # Pour un tag "fs/v1.0.3", ceci extraira "fs"
+          PLUGIN_NAME=$(echo ${{ github.ref_name }} | cut -d'/' -f1)
+          # Et ceci extraira "v1.0.3"
+          PLUGIN_VERSION=$(echo ${{ github.ref_name }} | cut -d'/' -f2)
+          echo "plugin_name=${PLUGIN_NAME}" >> $GITHUB_OUTPUT
+          echo "plugin_version=${PLUGIN_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build binaries for all platforms
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          # On passe la version extraite du tag à GoReleaser
+          version: ${{ steps.parse_tag.outputs.plugin_version }}
+          # On dit à GoReleaser de ne construire que le plugin concerné
+          args: release --clean --config .goreleaser.${{ steps.parse_tag.outputs.plugin_name }}.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# NOTE: Cette approche nécessite un fichier .goreleaser.<plugin>.yml pour chaque plugin.
+# C'est la méthode la plus robuste pour gérer des builds complexes.
+#
+# Exemple de fichier ".goreleaser.core.yml" à la racine :
+#
+# build:
+#   - id: "orkestra-plugin-core"
+#     main: ./plugins/core/
+#     binary: orkestra-plugin-core
+#     env:
+#       - CGO_ENABLED=0
+#     goos:
+#       - linux
+#       - windows
+#       - darwin
+#     goarch:
+#       - amd64
+#       - arm64
+# archives:
+#   - id: "orkestra-plugin-core-archives"
+#     builds:
+#       - "orkestra-plugin-core"
+#     name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+#     format: zip
+# release:
+#   name_template: "Plugin core {{.Version}}"
+

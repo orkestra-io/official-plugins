@@ -1,0 +1,21 @@
+build:
+  - id: "orkestra-plugin-fs"
+    main: ./plugins/fs/
+    binary: orkestra-plugin-fs
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+archives:
+  - id: "orkestra-plugin-fs-archives"
+    builds:
+      - "orkestra-plugin-fs"
+    name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+    format: zip
+release:
+  name_template: "Plugin fs {{.Version}}"
