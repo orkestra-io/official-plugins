@@ -1,0 +1,5 @@
+project_name: fs
+
+monorepo:
+  tag_prefix: fs/
+  dir: fs
