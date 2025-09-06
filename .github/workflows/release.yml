@@ -49,8 +49,7 @@ jobs:
       - name: Build binaries for all platforms
         uses: goreleaser/goreleaser-action@v6
         with:
-          # version: ${{ steps.parse_tag.outputs.plugin_version }}
-          args: release --clean --config .goreleaser.${{ steps.parse_tag.outputs.plugin_name }}.yml
+          args: release --clean -f ./plugins/${{ steps.parse_tag.outputs.plugin_name }}/.goreleaser.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
